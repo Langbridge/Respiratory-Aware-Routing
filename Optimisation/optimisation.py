@@ -119,7 +119,7 @@ for source, sink, _, data in G.edges(keys=True, data=True):
         data['rdd_'+subject] = segment_pm(0, kph_to_mps(v), d_height, data['length'], hr_0, ambient_pm, [])[0]
 
         data['speed_kph_'+subject] = v
-        data['travel_time_'+subject] = data['length'] / kph_to_mps(data['speed_kph']) / 60
+        data['travel_time_'+subject] = (data['length'] / kph_to_mps(data['speed_kph'])) / 60
         data['cost_'+subject] = 0.75*data['rdd_'+subject] + 0.25*data['travel_time_'+subject]
 
 ox.save_graphml(G, '../Mapping/data/London_pm.graphml')
