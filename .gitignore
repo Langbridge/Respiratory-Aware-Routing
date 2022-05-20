@@ -129,8 +129,12 @@ dmypy.json
 .pyre/
 
 *.csv
+
 *.gpx
 /Data*
+/MY Monitoring/Data*
+/MY Monitoring/Test_Data/
+*.h5
 /Test_Data
 /Deliverables
 /Expenses
