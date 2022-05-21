@@ -134,6 +134,7 @@ dmypy.json
 /Data*
 /MY Monitoring/Data*
 /MY Monitoring/Test_Data/
+/MY Monitoring/deep_model2/
 *.h5
 /Test_Data
 /Deliverables
@@ -145,3 +146,4 @@ dmypy.json
 *.png
 *.pdf
 *log.txt
+.gitignore
