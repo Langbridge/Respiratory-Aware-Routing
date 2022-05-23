@@ -135,7 +135,10 @@ dmypy.json
 /MY Monitoring/Data*
 /MY Monitoring/Test_Data/
 /MY Monitoring/deep_model2/
+/Commute Monitoring/A
+/Commute Monitoring/B
 *.h5
+*.ipynb
 /Test_Data
 /Deliverables
 /Expenses

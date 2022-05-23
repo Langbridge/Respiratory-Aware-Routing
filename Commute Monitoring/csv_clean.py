@@ -8,8 +8,8 @@ import gpxpy.gpx
 # ----- PARAMS
 subject = 'B'
 raw_data_file = 'input.csv'
-gpx_name = '1705AM.gpx'
-true_time = dt.datetime(2022, 5, 17, 15, 58, 44) # can be found from Strava log - for subject B add 1H for BST
+gpx_name = '1905AM.gpx'
+true_time = dt.datetime(2022, 5, 19, 7, 30, 21) # can be found from Strava log - for subject B add 1H for BST
 
 # ----- CODE
 df = pd.read_csv(subject+'/'+raw_data_file)
