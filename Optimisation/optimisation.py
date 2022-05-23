@@ -91,6 +91,12 @@ def route_pm(route, assistance, v):
     print(f"Total RDD: {sum(route_rdd):.2f} ug")
     return route_rdd
 
+def cost_fn(rdd, time):
+    return 0.05*rdd**2 + 0.5*(time/60)
+
+# def cost_fn(rdd, time):
+#     return 0.05*rdd**2 + 10*np.sqrt(time/60)
+
 # # USER PARAMS
 # m = 90
 # Tr = 24/60 # between 24 and 30s
@@ -101,8 +107,10 @@ def route_pm(route, assistance, v):
 # sex = 'M'
 
 ambient_pm = 10 # ug/m3
-subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 30/60, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 20},
-            'b': {'hr_0': 100, 'm': 100, 'Tr': 22/60, 'hr_max': 180, 'c': 0.45, 'kf': 6e-5, 'sex': 'M', 'v':15}}
+# subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 30/60, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 25},
+#             'b': {'hr_0': 100, 'm': 100, 'Tr': 22/60, 'hr_max': 180, 'c': 0.45, 'kf': 6e-5, 'sex': 'M', 'v':15}}
+subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 30/60, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 25},
+            'b': {'hr_0': 60, 'm': 90, 'Tr': 30/60, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 15}}
 
 for source, sink, _, data in G.edges(keys=True, data=True):
     # print(source['elevation'])
@@ -119,13 +127,45 @@ for source, sink, _, data in G.edges(keys=True, data=True):
         data['rdd_'+subject] = segment_pm(0, kph_to_mps(v), d_height, data['length'], hr_0, ambient_pm, [])[0]
 
         data['speed_kph_'+subject] = v
-        data['travel_time_'+subject] = (data['length'] / kph_to_mps(data['speed_kph'])) / 60
-        data['cost_'+subject] = 0.75*data['rdd_'+subject] + 0.25*data['travel_time_'+subject]
 
-ox.save_graphml(G, '../Mapping/data/London_pm.graphml')
+        distance_km = data['length'] / 1000
+        speed_km_sec = data['speed_kph_'+subject] / (60 * 60)
+        data['travel_time_'+subject] = distance_km / speed_km_sec
 
-# CHECK NEGATIVE GRADE EFFECTS
-# GET CHRIS TO REMIND ME HOW TO GITHUB THIS
+        data['cost_'+subject] = cost_fn(data['rdd_'+subject], data['travel_time_'+subject])
+
+# ox.save_graphml(G, '../Mapping/data/London_pm.graphml')
+
+for j in range(10):
+    print(f"JOURNEY {j}:")
+    orig = list(G)[np.random.randint(len(list(G)))]
+    dest = orig
+    while dest == orig:
+        dest = list(G)[np.random.randint(len(list(G)))]
+
+    # short = ox.shortest_path(G, orig, dest, weight='travel_time_a')
+    pma = ox.shortest_path(G, orig, dest, weight='cost_a')
+    pmb = ox.shortest_path(G, orig, dest, weight='cost_b')
+    routes = [pma, pmb]
+
+    for i, route in enumerate(routes):
+        if route is None: continue
+
+        rdd = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "rdd_a")))
+        distance = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "length")))
+        if i == 2:
+            traveltime = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "travel_time_b")))
+        else:
+            traveltime = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "travel_time_a")))
+
+        print(f"\tRoute {i} corresponds to inhaling {rdd:.2f} ug of PM2.5, takes {traveltime/60:.2f} minutes to cover {distance:.2f} m")
+
+    fig, ax = ox.plot_graph_routes(G, routes=routes, route_colors=['g','b'], node_size=0, figsize=(24,16), show=False)
+    ax.set_axis_off()
+
+    fig.savefig('img_dist/route_'+str(j)+'.png', dpi=300, bbox_inches='tight', transparent=True)
+
+
 
 # print(f"To ascend {d_height}m over {length}m at {v}km/h, it takes {segment_power(kph_to_mps(v), d_height, length):.2f} W")
 # print(f"To ascend {-d_height}m over {length}m at {v}km/h, it takes {segment_power(kph_to_mps(v), -d_height, length):.2f} W")
