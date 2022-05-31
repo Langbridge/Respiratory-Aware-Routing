@@ -19,6 +19,8 @@ from rdd import *
 import warnings
 warnings.filterwarnings("ignore")
 
+mode = "commute"
+
 G = ox.load_graphml('../Mapping/data/London.graphml')
 nodes, edges = ox.graph_to_gdfs(G)
 projection = CRS.from_epsg(3067)
@@ -53,46 +55,48 @@ def segment_power(v, d_height, l):
 def kph_to_mps(kmh):
     return kmh/3600 * 1000
 
-def hr_ss(hr_0, power):
-    hr = hr_0 + c*power
-    if hr > hr_max:
+def hr_ss(hr_0, power, t):
+    hr_ss = hr_0 + c*power
+    if hr_ss > hr_max:
         return hr_max
-    return hr
+    hr = hr_ss + (hr_0 - hr_ss) * pow(math.e, -t)
+    if hr < hr_ss:
+        return hr
+    return hr_ss
 
-def segment_hr(cyclist_power, hr_0, power_history=[]):
-    # TODO: split this into some sort of time segmented thing
-    # right now I think it's doing some weird shit lumping the whole power output as one HR step?
+def segment_hr(cyclist_power, hr_0, t=10, power_history=[]):
     percieved_power = cyclist_power + kf * sum(power_history)
-    return hr_ss(hr_0, percieved_power)
+    return hr_ss(hr_0, percieved_power, t)
 
-def segment_pm(assistance, v, d_height, l, hr_0, ambient_pm, power_history=[]):
+def segment_pm(assistance, v, d_height, l, hr_0, Tr, ambient_pm, power_history=[]):
     cyclist_power = (1-assistance) * segment_power(v, d_height, l) / n_mech
-    hr = segment_hr(cyclist_power, hr_0, power_history)
+    hr = segment_hr(cyclist_power, hr_0, (v/l)/Tr, power_history)
     # print(f"\tHeart Rate: {hr:.2f} bpm")
     return calc_rdd(sex, hr, l/v, ambient_pm), cyclist_power
 
-def route_pm(route, assistance, v):
-    power_history = []
-    assist_power = []
-    route_rdd = []
-    total_assistance = 0
+# def route_pm(route, assistance, v):
+#     power_history = []
+#     assist_power = []
+#     route_rdd = []
+#     total_assistance = 0
 
-    # route = node list [(u, v, key), (u, v, key), ...]
-    for i in range(len(route)):
-        print(f"Leg {i+1}:")
-        l = random.randint(20,100) #edges.loc[route[i], 'length']
-        d_height = (random.randint(1,60) - 30)/1000 #edges.loc[route[i], 'grade'] * l
-        print(f"\t{l}m at {d_height*100:.2f}% grade with {assistance[i]*100:.2f}% assistance")
-        rdd, cycle_power = segment_pm(assistance[i], v[i], d_height, l, hr_0, ambient_pm, power_history)
-        assist_power.append(cycle_power/(1-assistance[i]) * assistance[i] / n_elec)
-        power_history.append(cycle_power)
-        route_rdd.append(rdd)
-    print(f"Total assistance: {sum(assist_power):.2f}W, {sum(assist_power)/(sum(assist_power)+sum(power_history))*100:.2f}%")
-    print(f"Total RDD: {sum(route_rdd):.2f} ug")
-    return route_rdd
+#     # route = node list [(u, v, key), (u, v, key), ...]
+#     for i in range(len(route)):
+#         print(f"Leg {i+1}:")
+#         l = random.randint(20,100) #edges.loc[route[i], 'length']
+#         d_height = (random.randint(1,60) - 30)/1000 #edges.loc[route[i], 'grade'] * l
+#         print(f"\t{l}m at {d_height*100:.2f}% grade with {assistance[i]*100:.2f}% assistance")
+#         rdd, cycle_power = segment_pm(assistance[i], v[i], d_height, l, hr_0, ambient_pm, power_history)
+#         assist_power.append(cycle_power/(1-assistance[i]) * assistance[i] / n_elec)
+#         power_history.append(cycle_power)
+#         route_rdd.append(rdd)
+#     print(f"Total assistance: {sum(assist_power):.2f}W, {sum(assist_power)/(sum(assist_power)+sum(power_history))*100:.2f}%")
+#     print(f"Total RDD: {sum(route_rdd):.2f} ug")
+#     return route_rdd
 
 def cost_fn(rdd, time):
-    return 0.05*rdd**2 + 0.5*(time/60)
+    # return 0.05*rdd**2 + 0.5*(time/60)
+    return 0.05*rdd**2# + 0.7*(time/60)
 
 # def cost_fn(rdd, time):
 #     return 0.05*rdd**2 + 10*np.sqrt(time/60)
@@ -107,13 +111,12 @@ def cost_fn(rdd, time):
 # sex = 'M'
 
 ambient_pm = 10 # ug/m3
-# subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 30/60, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 25},
-#             'b': {'hr_0': 100, 'm': 100, 'Tr': 22/60, 'hr_max': 180, 'c': 0.45, 'kf': 6e-5, 'sex': 'M', 'v':15}}
-subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 30/60, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 25},
-            'b': {'hr_0': 60, 'm': 90, 'Tr': 30/60, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 15}}
+subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 20},
+            'b': {'hr_0': 100, 'm': 100, 'Tr': 30, 'hr_max': 180, 'c': 0.45, 'kf': 6e-5, 'sex': 'M', 'v': 20}}
+# subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 25},
+#             'b': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 15}}
 
 for source, sink, _, data in G.edges(keys=True, data=True):
-    # print(source['elevation'])
     d_height = nodes.loc[sink]['elevation'] - nodes.loc[source]['elevation']
     for subject in subjects.keys():
         m = subjects[subject]['m']
@@ -124,10 +127,11 @@ for source, sink, _, data in G.edges(keys=True, data=True):
         kf = subjects[subject]['kf']
         sex = subjects[subject]['sex']
         v = subjects[subject]['v']
-        data['rdd_'+subject] = segment_pm(0, kph_to_mps(v), d_height, data['length'], hr_0, ambient_pm, [])[0]
+
+        data['energy_'+subject] = segment_power(kph_to_mps(v), d_height, data['length']) * (data['length'] / kph_to_mps(v))
+        data['rdd_'+subject] = segment_pm(0, kph_to_mps(v), d_height, data['length'], hr_0, Tr, ambient_pm, [])[0]
 
         data['speed_kph_'+subject] = v
-
         distance_km = data['length'] / 1000
         speed_km_sec = data['speed_kph_'+subject] / (60 * 60)
         data['travel_time_'+subject] = distance_km / speed_km_sec
@@ -136,34 +140,68 @@ for source, sink, _, data in G.edges(keys=True, data=True):
 
 # ox.save_graphml(G, '../Mapping/data/London_pm.graphml')
 
-for j in range(10):
-    print(f"JOURNEY {j}:")
-    orig = list(G)[np.random.randint(len(list(G)))]
-    dest = orig
-    while dest == orig:
-        dest = list(G)[np.random.randint(len(list(G)))]
+if mode == "random":
+    for j in range(10):
+        print(f"JOURNEY {j}:")
+        orig = list(G)[np.random.randint(len(list(G)))]
+        dest = orig
+        while dest == orig:
+            dest = list(G)[np.random.randint(len(list(G)))]
 
-    # short = ox.shortest_path(G, orig, dest, weight='travel_time_a')
-    pma = ox.shortest_path(G, orig, dest, weight='cost_a')
-    pmb = ox.shortest_path(G, orig, dest, weight='cost_b')
-    routes = [pma, pmb]
+        # short = ox.shortest_path(G, orig, dest, weight='travel_time_a')
+        pma = ox.shortest_path(G, orig, dest, weight='cost_a')
+        pmb = ox.shortest_path(G, orig, dest, weight='cost_b')
+        routes = [pma, pmb]
+
+        for i, route in enumerate(routes):
+            if route is None: continue
+
+            rdd = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "rdd_a")))
+            distance = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "length")))
+            if i == 1:
+                energy = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "energy_b")))
+                traveltime = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "travel_time_b")))
+            else:
+                energy = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "energy_a")))
+                traveltime = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "travel_time_a")))
+
+            print(f"\tRoute {i} corresponds to inhaling {rdd:.2f} ug of PM2.5, exerting {energy:.2f} J over {traveltime/60:.2f} minutes, covering {distance:.2f} m")
+
+        fig, ax = ox.plot_graph_routes(G, routes=routes, route_colors=['g','b'], node_size=0, figsize=(24,16), show=False)
+        ax.set_axis_off()
+
+        fig.savefig('img_fit/route_'+str(j)+'.png', dpi=300, bbox_inches='tight', transparent=True)
+
+else:
+    origins = {'A': {'lat': 51.51789, 'lng': -0.08308}, 'B': {'lat': 51.45396, 'lng': -0.17366},  'C': {'lat': 51.517333, 'lng': -0.250967}}
+    destination = {'lat': 51.499824, 'lng': -0.174377}
+    G2 = ox.project_graph(G, to_crs='4326') 
+
+    point = (destination['lat'], destination['lng'])
+    dest_node = ox.get_nearest_node(G2, point, return_dist=False)
+
+    routes = []
+
+    for pt in origins.values():
+        point = (pt['lat'], pt['lng'])
+        node = ox.get_nearest_node(G2, point, return_dist=False)
+        
+        routes.append(ox.shortest_path(G, node, dest_node, weight='cost_a'))
 
     for i, route in enumerate(routes):
         if route is None: continue
 
         rdd = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "rdd_a")))
         distance = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "length")))
-        if i == 2:
-            traveltime = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "travel_time_b")))
-        else:
-            traveltime = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "travel_time_a")))
+        energy = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "energy_a")))
+        traveltime = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, "travel_time_a")))
 
-        print(f"\tRoute {i} corresponds to inhaling {rdd:.2f} ug of PM2.5, takes {traveltime/60:.2f} minutes to cover {distance:.2f} m")
+        print(f"\tRoute {origins.keys()[i]} corresponds to inhaling {rdd:.2f} ug of PM2.5, exerting {energy:.2f} J over {traveltime/60:.2f} minutes, covering {distance:.2f} m")
 
-    fig, ax = ox.plot_graph_routes(G, routes=routes, route_colors=['g','b'], node_size=0, figsize=(24,16), show=False)
+    fig, ax = ox.plot_graph_routes(G, routes=routes, route_colors=['r','g','b'], node_size=0, figsize=(24,16), show=False)
     ax.set_axis_off()
 
-    fig.savefig('img_dist/route_'+str(j)+'.png', dpi=300, bbox_inches='tight', transparent=True)
+    fig.savefig('commute_routes.png', dpi=300, bbox_inches='tight', transparent=True)
 
 
 
