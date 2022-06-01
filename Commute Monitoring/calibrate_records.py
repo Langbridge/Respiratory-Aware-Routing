@@ -16,10 +16,10 @@ warnings.filterwarnings("ignore")
 subject_list = ['A', 'B', 'C', 'D']
 model = keras.models.load_model('../MY Monitoring/deep_model2')
 
-G = ox.load_graphml('../Mapping/data/London.graphml')
-nodes, edges = ox.graph_to_gdfs(G)
-G = ox.project_graph(G, to_crs='4326') 
-print(f'Loaded graph success.')
+# G = ox.load_graphml('../Mapping/data/London.graphml')
+# nodes, edges = ox.graph_to_gdfs(G)
+# G = ox.project_graph(G, to_crs='4326') 
+# print(f'Loaded graph success.')
 
 log = pd.DataFrame(columns=['subject', 'file', 'date', 'commute', 'min', 'Q25', 'mean', 'Q75', 'max'])
 
@@ -47,14 +47,14 @@ for subject in subject_list:
                 model_df['Calibrated PM2.5'] = model.predict(train_df)
                 model_df.to_csv(subject+'/Calibrated/'+file)
 
-                log_data = {'subject': subject, 'file': file, 'date': model_df.index[0].date(), 'commute': file[4:6],
+                log_data = {'subject': subject, 'file': file, 'date': model_df.index[0], 'commute': file[4:6],
                             'min': model_df['Calibrated PM2.5'].min(), 'Q25': model_df['Calibrated PM2.5'].quantile(q=0.25),
                             'mean': model_df['Calibrated PM2.5'].mean(), 'Q75': model_df['Calibrated PM2.5'].quantile(q=0.75),
                             'max': model_df['Calibrated PM2.5'].max()}
                 log = log.append(log_data, ignore_index=True)
 
-                model_df[['PM2.5', 'Calibrated PM2.5']].plot(ylabel='PM2.5, ug/m3', figsize=(18,12), color=['gray','blue'])
-                plt.savefig(subject+'/img/'+file[:-4]+'_calibrated.png', dpi=300, bbox_inches='tight')
+                # model_df[['PM2.5', 'Calibrated PM2.5']].plot(ylabel='PM2.5, ug/m3', figsize=(18,12), color=['gray','blue'])
+                # plt.savefig(subject+'/img/'+file[:-4]+'_calibrated.png', dpi=300, bbox_inches='tight')
                 
                 # points_list = [Point((lng, lat)) for lat, lng in zip(lats, lngs)]
                 # points = geopandas.GeoSeries(points_list, crs='epsg:4326')
@@ -76,5 +76,5 @@ for subject in subject_list:
                 # fig.savefig(subject+'/img/'+file[:-4]+'_calibrated_route.png', dpi=300, bbox_inches='tight', transparent=True)
 
 
-# print(log)
+log.sort_values(by=['file'], inplace=True)
 log.to_csv('calibration_log.csv')
