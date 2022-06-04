@@ -4,7 +4,7 @@ import geopandas as gpd
 import os
 import sys
 
-sys.path.append('../Optimisation/')
+# sys.path.append('../Optimisation/')
 from rdd import *
 
 # BIKE PARAMS
@@ -24,10 +24,10 @@ n_elec = 0.72
 #             # 'D': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 4e-5, 'sex': 'F'}
 #             }
 subjects = {
-            'A': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 2e-5, 'sex': 'M'},
-            'B': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 2e-5, 'sex': 'M'},
-            'C': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 2e-5, 'sex': 'M'},
-            # 'D': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 2e-5, 'sex': 'M'},
+            'A': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 3e-5, 'sex': 'M'},
+            'B': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 3e-5, 'sex': 'M'},
+            'C': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 3e-5, 'sex': 'M'},
+            # 'D': {'hr_0': 70, 'm': 100, 'Tr': 24, 'hr_max': 180, 'c': 0.2, 'kf': 3e-5, 'sex': 'M'},
             }
 
 def gps_dist(row1, row2):
@@ -64,7 +64,7 @@ def segment_pm(cyclist_power, v, l, hr_0, Tr, ambient_pm, sex, kf, hr_max, c, po
     return calc_rdd(sex, hr, l/v, ambient_pm)
 
 def row_pm(row, subject):
-    return segment_pm(row['power'], row['velocity'], row['distance'], subject['hr_0'], subject['Tr'], 1, subject['sex'], subject['kf'], subject['hr_max'], subject['c'], row['power_history'])
+    return segment_pm(row['power'], row['velocity'], row['distance'], subject['hr_0'], subject['Tr'], row['PM2.5'], subject['sex'], subject['kf'], subject['hr_max'], subject['c'], row['power_history'])
 
 def row_power(row, subject):
     return segment_power(row['velocity'], row['dh'], row['distance'], subject['m']) / n_mech
@@ -86,9 +86,11 @@ for subject in subjects.keys():
                     dists.append(gps_dist(raw_data.iloc[x], raw_data.iloc[x+1]))
 
                 df = raw_data[['WriteTime', 'Alt']].diff()
+                df['PM2.5'] = raw_data['Calibrated PM2.5'].shift(1)
+
                 df = df.dropna().reset_index(drop=True)
                 df = pd.concat([df, pd.Series(dists)], axis=1, ignore_index=True)
-                df.rename(columns={0: 'dt', 1: 'dh', 2: 'distance'}, inplace=True)
+                df.rename(columns={0: 'dt', 1: 'dh', 2: 'PM2.5', 3: 'distance'}, inplace=True)
                 df = df.loc[~(df==0).all(axis=1)]
 
                 df['dt'] = df['dt'].dt.total_seconds()
@@ -97,17 +99,21 @@ for subject in subjects.keys():
 
                 df['power'] = df.apply(row_power, args=(subjects[subject],), axis=1)
                 df['power_history'] = df['power'].rolling(20).sum()
-                df['power_history'].fillna(df['power'], inplace=True)
+                df['power_history'].fillna(df['power'].shift(1), inplace=True)
+                df['power_history'].fillna(0.0, inplace=True)
                 df.dropna(inplace=True)
-
-
+                                                
                 df['rdd'] = df.apply(row_pm, args=(subjects[subject],), axis=1)
                 print(f"\t{file[:-4]}\t{sum(df['rdd']):.2f} ug")
 
-                # log.at[log[log['file']==file].index, 'rdd'] = sum(df['rdd'])
+                df['power_history'] = 0.0
+                df['rdd_nohis'] = df.apply(row_pm, args=(subjects[subject],), axis=1)
+                print(f"\t...\t{sum(df['rdd_nohis']):.2f} ug")
+                diff = (sum(df['rdd_nohis']) - sum(df['rdd'])) / sum(df['rdd'])
+                print(f"\t...\t{diff*100:.5f}% difference")
+
                 idx = log[log['file']==file].index
                 log.loc[idx, 'rdd'] = sum(df['rdd'])
 
-print(log.sort_values(by=['rdd']))
-
-log.to_csv('../Commute Monitoring/calibration_log.csv')
+# print(log.sort_values(by=['rdd']))
+# log.to_csv('../Commute Monitoring/calibration_log.csv')

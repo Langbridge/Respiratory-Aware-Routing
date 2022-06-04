@@ -1,8 +1,6 @@
 import numpy as np
 import math
-import random
 import pandas as pd
-import geopandas
 import matplotlib.pyplot as plt
 
 import osmnx as ox
@@ -11,22 +9,22 @@ from pyproj import CRS
 from shapely.strtree import STRtree
 from shapely.geometry import Point
 
-import requests
 from time import perf_counter
+from scipy.stats import ttest_ind
 
 from rdd import *
 
 import warnings
 warnings.filterwarnings("ignore")
 
-mode = "random"
+mode = "stats"
 
 G = ox.load_graphml('../Mapping/data/London.graphml')
 nodes, edges = ox.graph_to_gdfs(G)
 projection = CRS.from_epsg(3067)
 nodes = nodes.to_crs(projection)
 edges = edges.to_crs(projection)
-print(f"London travel graph has {len(edges)} edges connecting {len(nodes)} nodes.")
+# print(f"London travel graph has {len(edges)} edges connecting {len(nodes)} nodes.")
 
 # BIKE PARAMS
 g = 9.81
@@ -80,12 +78,12 @@ def cost_fn(rdd, time):
 
 ambient_pm = 10 # ug/m3
 # SUBJECT
-subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 20, 'color': 'g'},
-            'b': {'hr_0': 100, 'm': 100, 'Tr': 30, 'hr_max': 180, 'c': 0.45, 'kf': 6e-5, 'sex': 'M', 'v': 20, 'color': 'b'}}
+# subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 20, 'color': 'g'},
+#             'b': {'hr_0': 100, 'm': 100, 'Tr': 30, 'hr_max': 180, 'c': 0.45, 'kf': 6e-5, 'sex': 'M', 'v': 20, 'color': 'b'}}
 
 # VELOCITY
-# subjects = {'a_slow': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 15, 'color': 'g'},
-#             'a_fast': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 25, 'color': 'r'}}
+subjects = {'a_slow': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 15, 'color': 'g'},
+            'a_fast': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 25, 'color': 'r'}}
 
 # THREE FOLD COMPARISON
 # subjects = {'a': {'hr_0': 60, 'm': 90, 'Tr': 22, 'hr_max': 180, 'c': 0.15, 'kf': 1e-5, 'sex': 'M', 'v': 15, 'color': 'g'},
@@ -116,7 +114,6 @@ for source, sink, _, data in G.edges(keys=True, data=True):
 
         data['cost_'+subject] = cost_fn(data['rdd_'+subject], data['travel_time_'+subject])
 print(f"Time elapsed to calculate graph weights:\t{perf_counter()-t0} s")
-
 
 # ox.save_graphml(G, '../Mapping/data/London_pm.graphml')
 
@@ -190,13 +187,23 @@ elif mode == "commute":
 
     fig.savefig('commute_routes.png', dpi=300, bbox_inches='tight', transparent=True)
 
+elif mode == "stats":
+    rdd_dict = {'rdd_a_slow': [], 'rdd_a_fast': []}
 
+    for j in range(500):
+        orig = list(G)[np.random.randint(len(list(G)))]
+        dest = orig
+        while dest == orig:
+            dest = list(G)[np.random.randint(len(list(G)))]
 
-# print(f"To ascend {d_height}m over {length}m at {v}km/h, it takes {segment_power(kph_to_mps(v), d_height, length):.2f} W")
-# print(f"To ascend {-d_height}m over {length}m at {v}km/h, it takes {segment_power(kph_to_mps(v), -d_height, length):.2f} W")
-# print(f"If ambient PM is {ambient_pm}ug/m3, {assistance*100}% assistance results in {segment_pm(assistance, kmh_to_mps(v), d_height, length, hr_0, ambient_pm, power_history=[]):.2f} ug of deposited PM2.5")
-# assistance = 0
-# print(f"If ambient PM is {ambient_pm}ug/m3, {assistance*100}% assistance results in {segment_pm(assistance, kmh_to_mps(v), d_height, length, hr_0, ambient_pm, power_history=[]):.2f} ug of deposited PM2.5")
+        for subject in subjects.keys():
+            weight = 'rdd_'+subject
+            route = ox.shortest_path(G, orig, dest, weight=weight)
+            
+            if route is None: continue
 
-# print(route_pm([1, 2, 4, 3, 5], [random.randint(1,50)/100 for x in range(5)], [kph_to_mps(15)]*5))
-# print(route_pm([1, 2, 4, 3, 5], [0.25]*5, [kph_to_mps(20)]*5))
+            rdd = (np.sum(ox.utils_graph.get_route_edge_attributes(G, route, weight)))
+            rdd_dict[weight].append(rdd)
+
+    print(f"A: {np.mean(rdd_dict['rdd_a_slow'])} ug m-3\tB: {np.mean(rdd_dict['rdd_a_fast'])} ug m-3")
+    print(ttest_ind(rdd_dict['rdd_a_slow'], rdd_dict['rdd_a_fast'], alternative='greater'))
