@@ -13,18 +13,22 @@ from shapely.geometry import Point
 import warnings
 warnings.filterwarnings("ignore")
 
+# ----- PARAMS
 subject_list = ['A', 'B', 'C', 'D']
 model = keras.models.load_model('../MY Monitoring/deep_model2')
 
+# load the travel graph, project to coordinate space and intialise PM2.5 characteristics to 0
 G = ox.load_graphml('../Mapping/data/London.graphml')
 nodes, edges = ox.graph_to_gdfs(G)
+G = ox.project_graph(G, to_crs='4326') 
 edges['Mean PM2.5'] = np.nan
 edges['PM2.5 Count'] = 0
-G = ox.project_graph(G, to_crs='4326') 
 print(f'Loaded graph success.')
 
 log = pd.DataFrame(columns=['subject', 'file', 'date', 'commute', 'min', 'Q25', 'mean', 'Q75', 'max'])
 
+# for every subject, calibrate each journey and create plots of the calbration, and a heatmap of the journey
+# also aggregate calibrated PM2.5 measurements as graph attributes
 for subject in subject_list:
     print(subject)
     directory = os.path.join(subject+'/Cleaned/')
@@ -56,20 +60,22 @@ for subject in subject_list:
                             'max': model_df['Calibrated PM2.5'].max()}
                 log = log.append(log_data, ignore_index=True)
 
+                # plot raw and calibrated data
                 ax = model_df[['PM2.5', 'Calibrated PM2.5']].plot(ylabel='PM2.5, ug/m3', figsize=(18,12), color=['gray','blue'])
                 fig = ax.get_figure()
                 fig.savefig(subject+'/img/'+file[:-4]+'_calibrated.png', dpi=300, bbox_inches='tight')
                 
+                # fit GPS measurements to the graph
                 points_list = [Point((lng, lat)) for lat, lng in zip(lats, lngs)]
                 points = geopandas.GeoSeries(points_list, crs='epsg:4326')
                 nearest_edges = ox.nearest_edges(G, [pt.x for pt in points], [pt.y for pt in points])
-
                 pts = geopandas.GeoDataFrame({'Geometry': points, 'Nearest Edge': nearest_edges, 'PM2.5': model_df['Calibrated PM2.5'].to_list()})
 
                 edge_pollute = pts.groupby(['Nearest Edge']).first()
                 edge_pollute['PM2.5'] = pts.groupby(['Nearest Edge']).mean()
                 edge_pollute.index = pd.MultiIndex.from_tuples(edge_pollute.index, names=('u', 'v', 'key'))
 
+                # aggregate calibrated data with edge PM2.5 metrics 
                 edges['PM2.5'] = np.nan
                 edges.loc[edge_pollute.index, 'PM2.5'] = edge_pollute['PM2.5']
                 for idx in edge_pollute.index:
@@ -79,21 +85,22 @@ for subject in subject_list:
                         edges.loc[idx, 'Mean PM2.5'] = edge_pollute.loc[idx, 'PM2.5']
                     edges.loc[idx, 'PM2.5 Count'] += 1
 
-                fig, ax = plt.subplots(figsize=(24,16))
+                # plot individual commute heatmap
+                fig, ax = plt.subplots(figsize=(18,12))
                 ax.set_axis_off()
                 edges.plot(ax=ax, linewidth=0.5, edgecolor='dimgray')
                 edges.loc[pts['Nearest Edge']].plot(ax=ax, linewidth=1.5, column='PM2.5', cmap='inferno', legend=True, vmax=model_df['Calibrated PM2.5'].quantile(q=0.9),
-                                                    legend_kwds={'label': "PM2.5 (ug / m3)", 'orientation': "vertical"})
+                                                    legend_kwds={'label': "PM2.5 (ug / m3)", 'orientation': "horizontal"})
                 fig.savefig(subject+'/img/'+file[:-4]+'_calibrated_route.png', dpi=300, bbox_inches='tight', transparent=True)
 
-edges['Mean PM2.5'] = edges['Mean PM2.5'].apply(lambda x: np.mean(x))
-
-fig, ax = plt.subplots(figsize=(24,16))
+# plot aggregated commute heatmap
+fig, ax = plt.subplots(figsize=(18,12))
 ax.set_axis_off()
 edges.plot(ax=ax, linewidth=0.5, edgecolor='dimgray')
 edges[edges['Mean PM2.5'] != np.nan].plot(ax=ax, linewidth=1.5, column='Mean PM2.5', cmap='inferno', legend=True, vmax=17.5,
-                                          legend_kwds={'label': "PM2.5 (ug / m3)", 'orientation': "vertical"})
+                                          legend_kwds={'label': "PM2.5 (ug / m3)", 'orientation': "horizontal"})
 fig.savefig('ldn_heatmap.png', dpi=300, bbox_inches='tight', transparent=True)
 
+# save calibration log
 log.sort_values(by=['file'], inplace=True)
 log.to_csv('calibration_log.csv')

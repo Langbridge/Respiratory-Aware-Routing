@@ -1,3 +1,12 @@
+/**
+ * sd_read
+ *     Outputs the content of an internal SD card to the Serial Monitor.
+ *     Allows filtering by file prefix to only display certain file contents.
+ * 
+ * @author Abi Langbridge
+ * @version 1.2 19/5/22
+ */
+
 #include <SPI.h>
 #include <SD.h>
 #include <SDS011.h>
@@ -12,46 +21,27 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  // wait for SD card to mount
   while (!SD.begin(26)) {
     delay(100);
   }
 
   Serial.print("Printing....");
 
-  journey = 1;
-  idx = 0;
-  
-//  while(SD.exists("/Journey "+String(journey)+"_0.csv")) {
-//    Serial.println("Journey"+String(journey));
-//    
-//    while(SD.exists("/Journey "+String(journey)+"_"+String(idx)+".csv")) {
-//      csv = SD.open("/Journey "+String(journey)+"_"+String(idx)+".csv");
-//      
-//      if (csv) {
-//        while (csv.available()) {
-//          Serial.write(csv.read());
-//        }
-//        
-//        csv.close();
-//      }
-//      
-//      if (wipe) {
-//        SD.remove("/Journey "+String(journey)+"_"+String(idx)+".csv");
-//      }
-//      
-//      idx++;
-//    }
-//    Serial.println("");
-//    journey++;
-//  }
-
   root = SD.open("/");
-  printDirectory(root, 0);
+  printDirectory(root, 0, "Journey");
 }
 
 void loop() {}
 
-void printDirectory(File dir, int numTabs) {
+/**
+ * Prints the sub-directories in directory dir, and files beginning with prefix.
+ * 
+ * @param dir directory to print from
+ * @param numTabs number of tabs to prefix print with, recursion depth
+ * @param prefix string prefix to search files for to print
+*/
+void printDirectory(File dir, int numTabs, str prefix) {
 
   while (true) {
     File entry =  dir.openNextFile();
@@ -66,11 +56,12 @@ void printDirectory(File dir, int numTabs) {
     Serial.print(entry.name());
     if (entry.isDirectory()) {
       Serial.println("/");
-      printDirectory(entry, numTabs + 1);
+      printDirectory(entry, numTabs+1, prefix);
     }
     else {
       Serial.println();
-      if(String(entry.name()).indexOf("Journey") >= 0) {
+      // only print the contents of files beginning "Journey"
+      if(String(entry.name()).indexOf(prefix) >= 0) {
         while (entry.available()) {
           Serial.write(entry.read());
         }
