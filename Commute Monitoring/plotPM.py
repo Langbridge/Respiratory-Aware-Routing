@@ -1,15 +1,13 @@
 import pandas as pd
 import datetime as dt
 import numpy as np
+import matplotlib.pyplot as plt
 
-import gpxpy
 import gpxpy.gpx
 
 # ----- PARAMS
-subject = 'E'
+subject = 'D'
 raw_data_file = 'input.csv'
-gpx_name = '0706AM.gpx'
-true_time = dt.datetime(2022, 6, 7, 9, 24, 0) # can be found from Strava log - for subject B add 1H for BST
 
 # populate the dataframe with the raw commute data
 df = pd.read_csv(subject+'/'+raw_data_file)
@@ -42,30 +40,7 @@ df['1000Lng'] = df['1000Lng']/1000
 df.rename(columns={'1000Lat': 'Lat', '1000Lng': 'Lng'}, inplace=True)
 
 df = df.sort_index()
+print(df)
 
-# if available, missing GPS data can be populated using Strava information
-gpx_file = open(subject+'/'+gpx_name, 'r')
-gpx = gpxpy.parse(gpx_file)
-start_time = None
-for track in gpx.tracks:
-    for segment in track.segments:
-        for point in segment.points:
-            if start_time == None:
-                start_time = point.time.replace(tzinfo=None)
-                t_offset = start_time-true_time
-            point.time = point.time - t_offset
-
-            idx = df.index.get_loc(point.time.replace(tzinfo=None), method='nearest')
-            idx = df.iloc[idx].name
-            if df.loc[idx, 'Lat'] == 0.0:
-                df.loc[idx, 'Lat'] = point.latitude
-                df.loc[idx, 'Lng'] = point.longitude
-
-# remove any remaining invalid GPS data and save the cleaned file
-df = df.drop(df[df['Lat'] == 0.0].index)
-df.to_csv(subject+"/Cleaned/"+gpx_name[:-4]+".csv")
-
-# write summary information to the log
-with open(subject+"/log.txt", "a+") as f:
-    f.write(f"{df.index[0]}, {len(df)} of {start_len} valid measurements, mean PM2.5 {df['PM2.5'].mean():.4f} ug/m3\n")
-
+df['PM2.5'].plot()
+plt.show()

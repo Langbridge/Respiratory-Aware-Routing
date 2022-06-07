@@ -14,7 +14,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ----- PARAMS
-subject_list = ['A', 'B', 'C', 'D']
+subject_list = ['A', 'B', 'C', 'D', 'E']
 model = keras.models.load_model('../MY Monitoring/deep_model2')
 
 # load the travel graph, project to coordinate space and intialise PM2.5 characteristics to 0
